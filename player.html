@@ -104,7 +104,7 @@
                 setCurrentVideo(video);
                 
                 if (Hls.isSupported() && video?.url) {
-                    hlsRef.current.loadSource(video.url);
+                    hlsRef.current.loadSource(`${window.path}/${video.url}`);
                     hlsRef.current.attachMedia(videoRef.current);
                     hlsRef.current.on(Hls.Events.MANIFEST_PARSED, () => {
                         videoRef.current.play().catch(e => console.log('Playback failed:', e));
@@ -190,7 +190,7 @@
                                     >
                                         <div className="relative w-24 aspect-video bg-gray-200 rounded overflow-hidden">
                                             <img
-                                                src={video.thumbnail}
+                                                src={`${window.path}/${video.thumbnail}`}
                                                 alt=""
                                                 className="w-full h-full object-cover"
                                             />
