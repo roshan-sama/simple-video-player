@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video Player</title>
+    <script src="./tailwind.css"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+    <!-- React and related dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <style>
+        .video-container {
+            position: relative;
+            width: 100%;
+            background: black;
+            aspect-ratio: 16/9;
+        }
+        
+        .playlist-container {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        #offlineIndicator {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 40;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const VideoPlayer = () => {
+            const [playlists, setPlaylists] = useState([]);
+            const [currentPlaylist, setCurrentPlaylist] = useState([]);
+            const [currentVideo, setCurrentVideo] = useState(null);
+            const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+            const [storageStats, setStorageStats] = useState({ used: 0, available: 0 });
+            const [showStoragePrompt, setShowStoragePrompt] = useState(false);
+            const videoRef = useRef(null);
+            const hlsRef = useRef(null);
+
+            useEffect(() => {
+                // Initialize HLS on mount
+                if (Hls.isSupported()) {
+                    hlsRef.current = new Hls();
+                }
+                
+                // Load playlists
+                fetch(`https://${window.fqdn}/${window.path}/playlists.json`)
+                    .then(res => res.json())
+                    .then(data => setPlaylists(data))
+                    .catch(err => console.error('Failed to load playlists:', err));
+
+                // Check storage permission
+                checkStoragePermission();
+
+                return () => {
+                    if (hlsRef.current) {
+                        hlsRef.current.destroy();
+                    }
+                };
+            }, []);
+
+            const checkStoragePermission = async () => {
+                if ('storage' in navigator && 'persist' in navigator.storage) {
+                    const isPersisted = await navigator.storage.persist();
+                    if (!isPersisted) {
+                        setShowStoragePrompt(true);
+                    }
+                }
+                await calculateStorageStats();
+            };
+
+            const calculateStorageStats = async () => {
+                if ('storage' in navigator && 'estimate' in navigator.storage) {
+                    const { usage, quota } = await navigator.storage.estimate();
+                    setStorageStats({
+                        used: Math.round(usage / (1024 * 1024)),
+                        available: Math.round(quota / (1024 * 1024))
+                    });
+                }
+            };
+
+            const loadPlaylist = async (playlistName) => {
+                try {
+                    const response = await fetch(`https://${window.fqdn}/${window.path}/${playlistName}.json`);
+                    const data = await response.json();
+                    setCurrentPlaylist(data);
+                } catch (err) {
+                    console.error('Failed to load playlist:', err);
+                }
+            };
+
+            const playVideo = (video) => {
+                setCurrentVideo(video);
+                
+                if (Hls.isSupported() && video?.url) {
+                    hlsRef.current.loadSource(video.url);
+                    hlsRef.current.attachMedia(videoRef.current);
+                    hlsRef.current.on(Hls.Events.MANIFEST_PARSED, () => {
+                        videoRef.current.play().catch(e => console.log('Playback failed:', e));
+                    });
+                }
+            };
+
+            return (
+                <div className="container mx-auto p-4">
+                    {showStoragePrompt && (
+                        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="mb-3">Would you like to store videos for offline viewing? This could use significant storage space.</p>
+                            <div className="flex gap-2">
+                                <button 
+                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                    onClick={() => {
+                                        navigator.storage.persist();
+                                        setShowStoragePrompt(false);
+                                    }}
+                                >
+                                    Allow
+                                </button>
+                                <button 
+                                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                                    onClick={() => setShowStoragePrompt(false)}
+                                >
+                                    Not Now
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="lg:flex gap-4">
+                        {/* Video Player Section */}
+                        <div className="lg:w-3/4">
+                            <div className="video-container rounded-lg overflow-hidden">
+                                <video
+                                    ref={videoRef}
+                                    className="w-full h-full"
+                                    controls
+                                    playsInline
+                                >
+                                    Your browser doesn't support HTML5 video.
+                                </video>
+                            </div>
+                            
+                            <div className="mt-4 flex justify-between items-center">
+                                <h2 className="text-xl font-semibold">
+                                    {currentVideo?.title || 'Select a video'}
+                                </h2>
+                                <button
+                                    onClick={() => setIsSettingsOpen(true)}
+                                    className="p-2 hover:bg-gray-100 rounded-full"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Playlist Section */}
+                        <div className="lg:w-1/4 mt-4 lg:mt-0">
+                            <select 
+                                className="w-full p-2 mb-4 border rounded"
+                                onChange={(e) => loadPlaylist(e.target.value)}
+                            >
+                                <option value="">Select Playlist</option>
+                                {playlists.map(playlist => (
+                                    <option key={playlist} value={playlist}>{playlist}</option>
+                                ))}
+                            </select>
+
+                            <div className="border rounded-lg overflow-hidden playlist-container">
+                                {currentPlaylist.map((video, index) => (
+                                    <div
+                                        key={index}
+                                        className={`p-4 flex gap-3 cursor-pointer hover:bg-gray-50 ${
+                                            currentVideo?.id === video.id ? 'bg-blue-50' : ''
+                                        }`}
+                                        onClick={() => playVideo(video)}
+                                    >
+                                        <div className="relative w-24 aspect-video bg-gray-200 rounded overflow-hidden">
+                                            <img
+                                                src={video.thumbnail}
+                                                alt=""
+                                                className="w-full h-full object-cover"
+                                            />
+                                            <span className="absolute bottom-1 right-1 text-xs bg-black/75 text-white px-1 rounded">
+                                                {video.duration}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-medium line-clamp-2">{video.title}</h3>
+                                            <div className="text-sm text-gray-500 mt-1">
+                                                {video.size}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Settings Modal */}
+                    {isSettingsOpen && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+                            <div className="bg-white rounded-lg max-w-md w-full p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xl font-semibold">Storage Settings</h3>
+                                    <button onClick={() => setIsSettingsOpen(false)}>×</button>
+                                </div>
+                                
+                                <div className="space-y-4">
+                                    <div className="p-4 bg-gray-50 rounded-lg">
+                                        <div className="flex items-center gap-3">
+                                            <div>
+                                                <div className="font-medium">Storage Usage</div>
+                                                <div className="text-sm text-gray-500">
+                                                    {storageStats.used}MB used of {storageStats.available}MB
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <h4 className="font-medium mb-2">Cached Videos</h4>
+                                        {currentPlaylist.map(video => (
+                                            <div key={video.id} className="flex items-center justify-between p-2 hover:bg-gray-50">
+                                                <span className="truncate">{video.title}</span>
+                                                <div className="flex gap-2">
+                                                    <button className="text-blue-500 hover:text-blue-700">
+                                                        Download
+                                                    </button>
+                                                    <button className="text-red-500 hover:text-red-700">
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Mount the app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<VideoPlayer />);
+    </script>
+
+    <!-- Initialize global variables -->
+    <script>
+        window.fqdn = "##fqdn##";
+        window.path = "##path##";
+    </script>
+</body>
+</html>
