@@ -173,7 +173,9 @@
                       </div>
                       <div>
                         <h3 className="font-medium line-clamp-2">
-                          {videoFileName.replace(".mp4", "")}
+                          {videoFileName
+                            .replace(videoFileName.split("/")[0] + "/", "")
+                            .replace(".mp4", "")}
                         </h3>
                         {/* 
                         <div className="text-sm text-gray-500 mt-1">
