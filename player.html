@@ -60,7 +60,7 @@
               
               // Check for playlist in URL and load it if valid
               const initialPlaylist = getInitialPlaylist();
-              if (initialPlaylist && data.includes(initialPlaylist)) {
+              if (initialPlaylist) {
                 loadPlaylist(initialPlaylist);
                 // Update the select element
                 const selectElement = document.querySelector('select');
