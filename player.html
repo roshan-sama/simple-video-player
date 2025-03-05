@@ -125,7 +125,7 @@
               const autoPlay = params.get('autoplay')
               if(autoPlay) {
                 const currentIndex = currentPlaylist.findIndex((videoName) => videoName === currentVideoFileName)
-                const newIndex = (currentIndex + 1) >= currentPlaylist.length ? currentIndex + 1 : 0
+                const newIndex = (currentIndex + 1) >= currentPlaylist.length ? 0 : currentIndex + 1
                 playVideo(currentPlaylist[newIndex])
               }
             };
