@@ -1,4 +1,41 @@
-const { useState, useEffect, useRef } = React;
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video Player</title>
+    <script src="./tailwind.css"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <style>
+      .video-container {
+        position: relative;
+        width: 100%;
+        background: black;
+        aspect-ratio: 16/9;
+      }
+
+      .playlist-container {
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+
+      #offlineIndicator {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 40;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useRef } = React;
 
 const VideoPlayer = () => {
   const [playlists, setPlaylists] = useState([]);
@@ -220,3 +257,15 @@ const VideoPlayer = () => {
     </div>
   );
 };
+
+      // Mount the app
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<VideoPlayer />);
+    </script>
+
+    <script>
+      window.fqdn = "##fqdn##";
+      window.path = "##path##";
+    </script>
+  </body>
+</html>
