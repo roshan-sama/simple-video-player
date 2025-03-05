@@ -37,175 +37,226 @@
     <script type="text/babel">
       const { useState, useEffect, useRef } = React;
 
-      const VideoPlayer = () => {
-        const [playlists, setPlaylists] = useState([]);
-        const [currentPlaylist, setCurrentPlaylist] = useState([]);
-        const [currentVideoFileName, setCurrentVideoFileName] = useState(null);
-        const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-        const videoRef = useRef(null);
-        const hlsRef = useRef(null);
+const VideoPlayer = () => {
+  const [playlists, setPlaylists] = useState([]);
+  const [currentPlaylist, setCurrentPlaylist] = useState([]);
+  const [currentVideoFileName, setCurrentVideoFileName] = useState(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [autoplay, setAutoplay] = useState(false);
+  const videoRef = useRef(null);
+  const hlsRef = useRef(null);
+  
+  // Get playlist from URL parameter
+  const getInitialPlaylist = () => {    
+    const params = new URLSearchParams(window.location.search);
+    return params.get('playlist');
+  };
+  
+  // Get autoplay from URL parameter
+  const getInitialAutoplay = () => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('autoplay') === 'true';
+  };
+
+  useEffect(() => {
+    // Load playlists
+    fetch(`https://${window.fqdn}/${window.path}/playlists.json`)
+      .then((res) => res.json())
+      .then((data) => {
+        setPlaylists(data);
         
-        // Get playlist from URL parameter
-        const getInitialPlaylist = () => {    
-          const params = new URLSearchParams(window.location.search);
-          return params.get('playlist');
-        };
-
-        useEffect(() => {
-          // Load playlists
-          fetch(`https://${window.fqdn}/${window.path}/playlists.json`)
-            .then((res) => res.json())
-            .then((data) => {
-              setPlaylists(data);
-              
-              // Check for playlist in URL and load it if valid
-              const initialPlaylist = getInitialPlaylist();
-              if (initialPlaylist) {
-                loadPlaylist(initialPlaylist);
-                // Update the select element
-                const selectElement = document.querySelector('select');
-                if (selectElement) {
-                  selectElement.value = initialPlaylist;
-                }
-              }
-            })
-            .catch((err) => console.error("Failed to load playlists:", err));
-
-          return () => {
-            if (hlsRef.current) {
-              hlsRef.current.destroy();
-            }
-          };
-        }, []);
-
-        const loadPlaylist = async (playlistName) => {
-          try {
-            const response = await fetch(
-              `https://${window.fqdn}/${window.path}/${playlistName}.json`
-            );
-            const data = await response.json();
-            setCurrentPlaylist(data);
-            
-            // Update URL with the new playlist parameter
-            const url = new URL(window.location);
-            url.searchParams.set('playlist', playlistName);
-            window.history.pushState({}, '', url);
-          } catch (err) {
-            console.error("Failed to load playlist:", err);
+        // Check for playlist in URL and load it if valid
+        const initialPlaylist = getInitialPlaylist();
+        if (initialPlaylist) {
+          loadPlaylist(initialPlaylist);
+          // Update the select element
+          const selectElement = document.querySelector('select');
+          if (selectElement) {
+            selectElement.value = initialPlaylist;
           }
-        };
+        }
+        
+        // Set initial autoplay state from URL
+        setAutoplay(getInitialAutoplay());
+      })
+      .catch((err) => console.error("Failed to load playlists:", err));
 
-        const playVideo = (videoFileName) => {
-          setCurrentVideoFileName(videoFileName);
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+      }
+    };
+  }, []);
+  
+  // Update URL when autoplay changes
+  useEffect(() => {
+    const url = new URL(window.location);
+    if (autoplay) {
+      url.searchParams.set('autoplay', 'true');
+    } else {
+      url.searchParams.delete('autoplay');
+    }
+    window.history.pushState({}, '', url);
+  }, [autoplay]);
 
-          if (videoFileName.endsWith(".m3u8")) {
-            // HLS stream
-            if (Hls.isSupported()) {
-              if (hlsRef.current) {
-                hlsRef.current.destroy();
-              }
-              hlsRef.current = new Hls();
-              hlsRef.current.loadSource(videoFileName);
-              hlsRef.current.attachMedia(videoRef.current);
-              hlsRef.current.on(Hls.Events.MANIFEST_PARSED, () => {
-                videoRef.current
-                  .play()
-                  .catch((e) => console.log("Playback failed:", e));
-              });
-            }
-          } else {
-            // Direct MP4 file
-            videoRef.current.src = videoFileName;
-            videoRef.current
-              .play()
-              .catch((e) => console.log("Playback failed:", e));
+  // Add event listener for video end
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    
+    const handleVideoEnd = () => {
+      if (autoplay && currentPlaylist.length > 0) {
+        const currentIndex = currentPlaylist.findIndex(
+          (videoName) => videoName === currentVideoFileName
+        );
+        const nextIndex = (currentIndex + 1) % currentPlaylist.length;
+        playVideo(currentPlaylist[nextIndex]);
+      }
+    };
+    
+    if (videoElement) {
+      videoElement.addEventListener('ended', handleVideoEnd);
+    }
+    
+    return () => {
+      if (videoElement) {
+        videoElement.removeEventListener('ended', handleVideoEnd);
+      }
+    };
+  }, [autoplay, currentPlaylist, currentVideoFileName]);
 
-            if(!videoRef.current.onended){
-              videoRef.current.onended = (event) => {
-                const params = new URLSearchParams(window.location.search);
-                const autoPlay = params.get('autoplay')
-                if(autoPlay) {
-                  const currentIndex = currentPlaylist.findIndex((videoName) => videoName === currentVideoFileName)
-                  const newIndex = (currentIndex + 1) >= currentPlaylist.length ? 0 : currentIndex + 1
-                  playVideo(currentPlaylist[newIndex])
-                }
-              }
-            };
-          }
-        };
+  const loadPlaylist = async (playlistName) => {
+    try {
+      const response = await fetch(
+        `https://${window.fqdn}/${window.path}/${playlistName}.json`
+      );
+      const data = await response.json();
+      setCurrentPlaylist(data);
+      
+      // Update URL with the new playlist parameter
+      const url = new URL(window.location);
+      url.searchParams.set('playlist', playlistName);
+      window.history.pushState({}, '', url);
+    } catch (err) {
+      console.error("Failed to load playlist:", err);
+    }
+  };
 
-        return (
-          <div className="container mx-auto p-4">
-            <h1 className="text-3xl font-bold mb-8 text-center">Video Player</h1>
-            <div className="lg:flex gap-4">
-              {/* Video Player Section */}
-              <div className="lg:w-3/4">
-                <div className="video-container rounded-lg overflow-hidden">
-                  <video
-                    ref={videoRef}
-                    className="w-full h-full"
-                    controls
-                    playsInline
-                  >
-                    Your browser doesn't support HTML5 video.
-                  </video>
-                </div>
+  const playVideo = (videoFileName) => {
+    setCurrentVideoFileName(videoFileName);
 
-                <div className="mt-4 flex justify-between items-center">
-                  <h2 className="text-xl font-semibold">
-                    {currentVideoFileName ?? "Select a video"}
-                  </h2>
-                </div>
-              </div>
+    if (videoFileName.endsWith(".m3u8")) {
+      // HLS stream
+      if (Hls.isSupported()) {
+        if (hlsRef.current) {
+          hlsRef.current.destroy();
+        }
+        hlsRef.current = new Hls();
+        hlsRef.current.loadSource(videoFileName);
+        hlsRef.current.attachMedia(videoRef.current);
+        hlsRef.current.on(Hls.Events.MANIFEST_PARSED, () => {
+          videoRef.current
+            .play()
+            .catch((e) => console.log("Playback failed:", e));
+        });
+      }
+    } else {
+      // Direct MP4 file
+      videoRef.current.src = videoFileName;
+      videoRef.current
+        .play()
+        .catch((e) => console.log("Playback failed:", e));
+    }
+  };
+  
+  const toggleAutoplay = () => {
+    setAutoplay(!autoplay);
+  };
 
-              {/* Playlist Section */}
-              <div className="lg:w-1/4 mt-4 lg:mt-0">
-                <select
-                  className="w-full p-2 mb-4 border rounded"
-                  onChange={(e) => loadPlaylist(e.target.value)}
-                  defaultValue={getInitialPlaylist() || ""}
-                >
-                  <option value="">Select Playlist</option>
-                  {playlists.map((playlist) => (
-                    <option key={playlist} value={playlist}>
-                      {playlist}
-                    </option>
-                  ))}
-                </select>
+  return (
+    <div className="container mx-auto p-4">
+      <h1 className="text-3xl font-bold mb-8 text-center">Video Player</h1>
+      <div className="lg:flex gap-4">
+        {/* Video Player Section */}
+        <div className="lg:w-3/4">
+          <div className="video-container rounded-lg overflow-hidden">
+            <video
+              ref={videoRef}
+              className="w-full h-full"
+              controls
+              playsInline
+            >
+              Your browser doesn't support HTML5 video.
+            </video>
+          </div>
 
-                <div className="border rounded-lg playlist-container">
-                  {currentPlaylist.map((videoFileName, index) => (
-                    <div
-                      key={index}
-                      className={`p-4 flex gap-3 cursor-pointer hover:bg-gray-50 ${
-                        currentVideoFileName === videoFileName
-                          ? "bg-blue-50"
-                          : ""
-                      }`}
-                      onClick={() => playVideo(videoFileName)}
-                    >
-                      <div className="relative w-24 aspect-video bg-gray-200 rounded overflow-hidden">
-                        <img
-                          src={videoFileName.replace(".mp4", ".jpg")}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div>
-                        <h3 className="font-medium line-clamp-2">
-                          {videoFileName
-                            .replace(videoFileName.split("/")[0] + "/", "")
-                            .replace(".mp4", "")}
-                        </h3>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          <div className="mt-4 flex justify-between items-center">
+            <h2 className="text-xl font-semibold">
+              {currentVideoFileName 
+                ? currentVideoFileName.replace(currentVideoFileName.split("/")[0] + "/", "").replace(".mp4", "")
+                : "Select a video"}
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className="text-sm">Autoplay</span>
+              <button 
+                onClick={toggleAutoplay}
+                className={`w-12 h-6 rounded-full flex items-center transition-colors duration-200 ease-in-out ${
+                  autoplay ? "bg-blue-600 justify-end" : "bg-gray-300 justify-start"
+                }`}
+              >
+                <span className="w-5 h-5 bg-white rounded-full mx-0.5 shadow-md"></span>
+              </button>
             </div>
           </div>
-        );
-      };
+        </div>
+
+        {/* Playlist Section */}
+        <div className="lg:w-1/4 mt-4 lg:mt-0">
+          <select
+            className="w-full p-2 mb-4 border rounded"
+            onChange={(e) => loadPlaylist(e.target.value)}
+            defaultValue={getInitialPlaylist() || ""}
+          >
+            <option value="">Select Playlist</option>
+            {playlists.map((playlist) => (
+              <option key={playlist} value={playlist}>
+                {playlist}
+              </option>
+            ))}
+          </select>
+
+          <div className="border rounded-lg playlist-container">
+            {currentPlaylist.map((videoFileName, index) => (
+              <div
+                key={index}
+                className={`p-4 flex gap-3 cursor-pointer hover:bg-gray-50 ${
+                  currentVideoFileName === videoFileName
+                    ? "bg-blue-50"
+                    : ""
+                }`}
+                onClick={() => playVideo(videoFileName)}
+              >
+                <div className="relative w-24 aspect-video bg-gray-200 rounded overflow-hidden">
+                  <img
+                    src={videoFileName.replace(".mp4", ".jpg")}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div>
+                  <h3 className="font-medium line-clamp-2">
+                    {videoFileName
+                      .replace(videoFileName.split("/")[0] + "/", "")
+                      .replace(".mp4", "")}
+                  </h3>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
       // Mount the app
       const root = ReactDOM.createRoot(document.getElementById("root"));
