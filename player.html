@@ -44,16 +44,6 @@
         const [isSettingsOpen, setIsSettingsOpen] = useState(false);
         const videoRef = useRef(null);
         const hlsRef = useRef(null);
-
-        videoRef.onended = (event) => {
-          const params = new URLSearchParams(window.location.search);
-          const autoPlay = params.get('autoplay')
-          if(autoPlay){
-            const currentIndex = currentPlaylist.findIndex((videoName) => videoName === currentVideoFileName)
-            const newIndex = (currentIndex + 1) >= currentPlaylist.length ? currentIndex + 1 : 0
-            playVideo(currentPlaylist[newIndex])
-          }
-        };
         
         // Get playlist from URL parameter
         const getInitialPlaylist = () => {    
@@ -129,6 +119,16 @@
             videoRef.current
               .play()
               .catch((e) => console.log("Playback failed:", e));
+            
+            videoRef.current.onended = (event) => {
+              const params = new URLSearchParams(window.location.search);
+              const autoPlay = params.get('autoplay')
+              if(autoPlay) {
+                const currentIndex = currentPlaylist.findIndex((videoName) => videoName === currentVideoFileName)
+                const newIndex = (currentIndex + 1) >= currentPlaylist.length ? currentIndex + 1 : 0
+                playVideo(currentPlaylist[newIndex])
+              }
+            };
           }
         };
 
