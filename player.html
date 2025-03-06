@@ -43,6 +43,7 @@ const VideoPlayer = () => {
   const [currentVideoFileName, setCurrentVideoFileName] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [autoplay, setAutoplay] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   
@@ -56,6 +57,13 @@ const VideoPlayer = () => {
   const getInitialAutoplay = () => {
     const params = new URLSearchParams(window.location.search);
     return params.get('autoplay') === 'true';
+  };
+  
+  // Get playback speed from URL parameter
+  const getInitialPlaybackSpeed = () => {
+    const params = new URLSearchParams(window.location.search);
+    const speed = parseFloat(params.get('speed'));
+    return !isNaN(speed) && speed > 0 ? speed : 1;
   };
 
   useEffect(() => {
@@ -78,6 +86,9 @@ const VideoPlayer = () => {
         
         // Set initial autoplay state from URL
         setAutoplay(getInitialAutoplay());
+        
+        // Set initial playback speed from URL
+        setPlaybackSpeed(getInitialPlaybackSpeed());
       })
       .catch((err) => console.error("Failed to load playlists:", err));
 
@@ -88,7 +99,7 @@ const VideoPlayer = () => {
     };
   }, []);
   
-  // Update URL when autoplay changes
+  // Update URL when autoplay or playback speed changes
   useEffect(() => {
     const url = new URL(window.location);
     if (autoplay) {
@@ -96,10 +107,17 @@ const VideoPlayer = () => {
     } else {
       url.searchParams.delete('autoplay');
     }
+    
+    if (playbackSpeed !== 1) {
+      url.searchParams.set('speed', playbackSpeed);
+    } else {
+      url.searchParams.delete('speed');
+    }
+    
     window.history.pushState({}, '', url);
-  }, [autoplay]);
+  }, [autoplay, playbackSpeed]);
 
-  // Add event listener for video end
+  // Add event listener for video end and apply playback speed
   useEffect(() => {
     const videoElement = videoRef.current;
     
@@ -114,6 +132,10 @@ const VideoPlayer = () => {
     };
     
     if (videoElement) {
+      // Set the playback speed whenever the video element or speed changes
+      videoElement.playbackRate = playbackSpeed;
+      
+      // Add ended event listener
       videoElement.addEventListener('ended', handleVideoEnd);
     }
     
@@ -122,7 +144,7 @@ const VideoPlayer = () => {
         videoElement.removeEventListener('ended', handleVideoEnd);
       }
     };
-  }, [autoplay, currentPlaylist, currentVideoFileName]);
+  }, [autoplay, currentPlaylist, currentVideoFileName, playbackSpeed]);
 
   const loadPlaylist = async (playlistName) => {
     try {
@@ -154,6 +176,8 @@ const VideoPlayer = () => {
         hlsRef.current.loadSource(videoFileName);
         hlsRef.current.attachMedia(videoRef.current);
         hlsRef.current.on(Hls.Events.MANIFEST_PARSED, () => {
+          // Set playback speed before playing
+          videoRef.current.playbackRate = playbackSpeed;
           videoRef.current
             .play()
             .catch((e) => console.log("Playback failed:", e));
@@ -162,9 +186,18 @@ const VideoPlayer = () => {
     } else {
       // Direct MP4 file
       videoRef.current.src = videoFileName;
+      // Set playback speed before playing
+      videoRef.current.playbackRate = playbackSpeed;
       videoRef.current
         .play()
         .catch((e) => console.log("Playback failed:", e));
+    }
+  };
+  
+  const changePlaybackSpeed = (speed) => {
+    setPlaybackSpeed(speed);
+    if (videoRef.current) {
+      videoRef.current.playbackRate = speed;
     }
   };
   
@@ -195,16 +228,36 @@ const VideoPlayer = () => {
                 ? currentVideoFileName.replace(currentVideoFileName.split("/")[0] + "/", "").replace(".mp4", "")
                 : "Select a video"}
             </h2>
-            <div className="flex items-center gap-2">
-              <span className="text-sm">Autoplay</span>
-              <button 
-                onClick={toggleAutoplay}
-                className={`w-12 h-6 rounded-full flex items-center transition-colors duration-200 ease-in-out ${
-                  autoplay ? "bg-blue-600 justify-end" : "bg-gray-300 justify-start"
-                }`}
-              >
-                <span className="w-5 h-5 bg-white rounded-full mx-0.5 shadow-md"></span>
-              </button>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Autoplay</span>
+                <button 
+                  onClick={toggleAutoplay}
+                  className={`w-12 h-6 rounded-full flex items-center transition-colors duration-200 ease-in-out ${
+                    autoplay ? "bg-blue-600 justify-end" : "bg-gray-300 justify-start"
+                  }`}
+                >
+                  <span className="w-5 h-5 bg-white rounded-full mx-0.5 shadow-md"></span>
+                </button>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Speed:</span>
+                <select 
+                  value={playbackSpeed} 
+                  onChange={(e) => changePlaybackSpeed(parseFloat(e.target.value))}
+                  className="border rounded p-1 text-sm"
+                >
+                  <option value="0.25">0.25x</option>
+                  <option value="0.5">0.5x</option>
+                  <option value="0.75">0.75x</option>
+                  <option value="1">1x</option>
+                  <option value="1.25">1.25x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="1.75">1.75x</option>
+                  <option value="2">2x</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
